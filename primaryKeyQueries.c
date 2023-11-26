@@ -185,9 +185,23 @@ uint64_t binarySearch(uint64_t arr[], uint64_t value)
     // NOT: return should not be 0
     uint64_t l = 0;
     uint64_t r = row_count-1;
-    // TODO
-    
-    return l;
+
+    uint64_t mid = (l + r) / 2;
+    while (l != r) {
+        mid = (l + r) / 2;
+
+        if (arr[mid] == value) {
+            return arr[mid];
+        }
+        else if (arr[mid] < value) { 
+            l = mid + 1; 
+        } 
+        else {
+            r = mid - 1;
+        }
+    }
+
+    return row_count-1;
 }
 
 /**
@@ -211,13 +225,13 @@ uint64_t binarySearch(uint64_t arr[], uint64_t value)
 int primary_key_read_by_dense_index_file(uint64_t from, uint64_t to, int number_of_tuples_per_block)
 {
     // Step 1: Look the dense buffer is loaded in memory; find the index corresponding to "from" (using linear/binary search, as the index is already sorted)
-    uint64_t from_key = linearSearch(dense_index_only_buffer, from);
+    // uint64_t from_key = linearSearch(dense_index_only_buffer, from);
 
     // Step 2: Look the dense buffer is loaded in memory; find the index corresponding to "to" (using linear/binary search, as the index is already sorted)
-    uint64_t to_key = linearSearch(dense_index_only_buffer, to);
+    // uint64_t to_key = linearSearch(dense_index_only_buffer, to);
 
-    // uint64_t from_key = binarySearch(dense_index_only_buffer, from); 
-    // uint64_t to_key = binarySearch(dense_index_only_buffer, to);
+    uint64_t from_key = binarySearch(dense_index_only_buffer, from); 
+    uint64_t to_key = binarySearch(dense_index_only_buffer, to);
 
     // Step 3: Since data is sorted based on the primary key, we can make reads in block (instead of tuples)
     // Assuming that each block is composed of "number_of_tuples_per_block" rows
