@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <stdlib.h>
 #include <time.h>
+#include <string.h>
 
 
 // Global variables
@@ -209,14 +210,14 @@ uint64_t binarySearch(uint64_t arr[], uint64_t value)
  */
 int primary_key_read_by_dense_index_file(uint64_t from, uint64_t to, int number_of_tuples_per_block)
 {
-        // Step 1: Look the dense buffer is loaded in memory; find the index corresponding to "from" (using linear/binary search, as the index is already sorted)
-    //uint64_t from_key = linearSearch(dense_index_only_buffer, from);
+    // Step 1: Look the dense buffer is loaded in memory; find the index corresponding to "from" (using linear/binary search, as the index is already sorted)
+    uint64_t from_key = linearSearch(dense_index_only_buffer, from);
 
     // Step 2: Look the dense buffer is loaded in memory; find the index corresponding to "to" (using linear/binary search, as the index is already sorted)
-    //uint64_t to_key = linearSearch(dense_index_only_buffer, to);
+    uint64_t to_key = linearSearch(dense_index_only_buffer, to);
 
-    uint64_t from_key = binarySearch(dense_index_only_buffer, from); 
-    uint64_t to_key = binarySearch(dense_index_only_buffer, to);
+    // uint64_t from_key = binarySearch(dense_index_only_buffer, from); 
+    // uint64_t to_key = binarySearch(dense_index_only_buffer, to);
 
     // Step 3: Since data is sorted based on the primary key, we can make reads in block (instead of tuples)
     // Assuming that each block is composed of "number_of_tuples_per_block" rows
@@ -227,20 +228,38 @@ int primary_key_read_by_dense_index_file(uint64_t from, uint64_t to, int number_
     int to_block_index = (dense_index_and_ptr_buffer[to_key * 2 + 1]) / block_size_in_number_of_items;
     
     // Step 4: Allocate buffer for a block
-    // TODO
+    uint64_t *block_data = malloc(block_size_in_bytes);
     
     // Step 5: open datafile
     int fd = open(data_filename, O_RDONLY);
     off_t block_offset = from_block_index * block_size_in_bytes;
     int match_count = 0;
 
+    // printf("From index: %d\n", from_block_index);
+    // printf("To index: %d\n", to_block_index);
     // Step 6: Iterate through only those blocks that might contain data in the queried range (starting from from_block_index)
-    // TODO
+    for (int i=from_block_index; i <= to_block_index; i++)
+	{
+        // printf("Block index: %d\n", i);
+        pread(fd, block_data, block_size_in_bytes, block_offset);
+        block_offset = block_offset + block_size_in_bytes;
+
+        // Since data is stored in row-major order, we are iterating in strides of col_count    
+		for (int j=0; j < block_size_in_number_of_items; j=j+col_count)
+        {
+            // printf("Block data: %d", block_data[j]);
+            // You can skip scanning, is the first element of the block is greater than "to" of the range
+            if (block_data[j] > to) break;
+
+            if (block_data[j] >= from && block_data[j] <= to) match_count++;
+		}
+	}
 
     // Step 7: free block buffer
     // Make sure to un comment the following statement 
-    // free(block_data);
-    return  match_count;
+    close(fd);
+    free(block_data);
+    return match_count;
 }
 
 /**
