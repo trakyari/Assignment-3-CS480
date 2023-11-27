@@ -186,12 +186,13 @@ uint64_t binarySearch(uint64_t arr[], uint64_t value)
     uint64_t l = 0;
     uint64_t r = row_count-1;
 
-    uint64_t mid = (l + r) / 2;
-    while (l != r) {
-        mid = (l + r) / 2;
+    uint64_t mid = 0;
+
+    while (l <= r) {
+        mid = l + (r - l) / 2;
 
         if (arr[mid] == value) {
-            return arr[mid];
+            return mid;
         }
         else if (arr[mid] < value) { 
             l = mid + 1; 
@@ -201,7 +202,12 @@ uint64_t binarySearch(uint64_t arr[], uint64_t value)
         }
     }
 
-    return row_count-1;
+    if (arr[l] < value && value < arr[r]) {
+        return l;
+    } 
+    else {
+        return r;
+    }
 }
 
 /**
@@ -283,20 +289,29 @@ int primary_key_read_by_dense_index_file(uint64_t from, uint64_t to, int number_
  */
 void load_sparse_index_file()
 {
-    int indf = open(sparse_index_filename, O_RDONLY);
     // TODO - 1 - Allocate sparse_index_and_ptr_buffer
+    sparse_index_and_ptr_buffer = malloc(row_count / 10 * 2 * sizeof(uint64_t));
+    
+    int indf = open(sparse_index_filename, O_RDONLY);
+    
     // TODO - 2 - Read data from sparse_index_filename into sparse_index_and_ptr_buffer
+    read(indf, sparse_index_and_ptr_buffer, row_count / 10 * 2 * sizeof(uint64_t));
+    
     close(indf);
 
     // TODO - 3 - Allocate sparse_index_only_buffer buffer
     // TODO - 4 - Copy just the attribute (column) value from sparse_index_and_ptr_buffer to sparse_index_only_buffer
+    sparse_index_only_buffer = malloc(row_count / 10 * sizeof(uint64_t));
+    for (int i=0; i < row_count / 10; i++) {
+        sparse_index_only_buffer[i] = sparse_index_and_ptr_buffer[i * 2];
+    }
 }
 
 // TODO - Task 7 - Uncomment the following
 void unload_sparse_index_file()
 {
-    //free(sparse_index_and_ptr_buffer);
-    //free(sparse_index_only_buffer);
+    free(sparse_index_and_ptr_buffer);
+    free(sparse_index_only_buffer);
 }
 
 /**
@@ -317,16 +332,79 @@ void unload_sparse_index_file()
  * This function is to query on the primary key column.
  *
  */
-int primary_key_read_by_sparse_index_file(uint64_t from, uint64_t to)
+int primary_key_read_by_sparse_index_file(uint64_t from, uint64_t to, int number_of_tuples_per_block)
 {
-    return -1;
+    uint64_t old_row_count = row_count; 
+    // printf("Previous row count: %d\n", row_count);
+    row_count = row_count / 10;
+
+    // Step 1: Look the dense buffer is loaded in memory; find the index corresponding to "from" (using linear/binary search, as the index is already sorted)
+    // uint64_t from_key = linearSearch(sparse_index_only_buffer, from);
+    // Step 2: Look the dense buffer is loaded in memory; find the index corresponding to "to" (using linear/binary search, as the index is already sorted)
+    // uint64_t to_key = linearSearch(sparse_index_only_buffer, to);
+    
+    uint64_t from_key = binarySearch(sparse_index_only_buffer, from); 
+    uint64_t to_key = binarySearch(sparse_index_only_buffer, to);
+    
+    row_count = old_row_count; 
+    // printf("Current row count: %d\n", row_count);
+
+    // Step 3: Since data is sorted based on the primary key, we can make reads in block (instead of tuples)
+    // Assuming that each block is composed of "number_of_tuples_per_block" rows
+    // Compute the index of the starting block and ending block in the data file
+    size_t block_size_in_number_of_items = col_count * number_of_tuples_per_block;     // Every block is composed of number_of_tuples_per_block rows
+    size_t block_size_in_bytes = block_size_in_number_of_items * sizeof(uint64_t);
+    size_t total_number_of_blocks_in_file = (row_count * col_count) / block_size_in_number_of_items;
+    int from_block_index = (sparse_index_and_ptr_buffer[from_key * 2 + 1]) / block_size_in_number_of_items;
+    int to_block_index = (sparse_index_and_ptr_buffer[to_key * 2 + 1]) / block_size_in_number_of_items;
+
+    // Sanity check
+    // if (from_key > to_key) {
+    //     to_block_index = total_number_of_blocks_in_file;
+    // }
+
+    to_block_index = total_number_of_blocks_in_file;
+
+    // Step 4: Allocate buffer for a block
+    uint64_t *block_data = malloc(block_size_in_bytes);
+    
+    // Step 5: open datafile
+    int fd = open(data_filename, O_RDONLY);
+    off_t block_offset = from_block_index * block_size_in_bytes;
+    int match_count = 0;
+
+    // printf("From index: %d\n", from_block_index);
+    // printf("To index: %d\n", to_block_index);
+    // Step 6: Iterate through only those blocks that might contain data in the queried range (starting from from_block_index)
+    for (int i=from_block_index; i < to_block_index; i++)
+	{
+        // printf("Block index: %d\n", i);
+        pread(fd, block_data, block_size_in_bytes, block_offset);
+        block_offset = block_offset + block_size_in_bytes;
+
+        // Since data is stored in row-major order, we are iterating in strides of col_count    
+		for (int j=0; j < block_size_in_number_of_items; j=j+col_count)
+        {
+            // printf("Block data: %d", block_data[j]);
+            // You can skip scanning, is the first element of the block is greater than "to" of the range
+            if (block_data[j] > to) break;
+
+            if (block_data[j] >= from && block_data[j] <= to) match_count++;
+		}
+	}
+
+    // Step 7: free block buffer
+    // Make sure to un comment the following statement 
+    close(fd);
+    free(block_data);
+    return match_count;
 }
 
 // Function to verify the correctness of all four implementation
 void verify_correctness(int number_of_queries, int method1[], int method2[], int method3[], int method4[])
 {
     for(int q=0; q< number_of_queries; q++)
-        if ( !(method1[q] == method2[q] == method3[q] == method4[q]) )
+        if (!((method1[q] == method2[q]) && (method2[q] == method3[q]) && (method3[q] == method4[q])))
             printf("Error or incomplete implementation\n");
 }
 
@@ -387,7 +465,7 @@ void queries_on_primary_key(int number_of_queries, int query_from_range[], int q
     clock_t start_b4 = clock();
     for (int q = 0; q < number_of_queries; q++)
     {
-        sparse_index_method_result_count[q] = primary_key_read_by_sparse_index_file(query_from_range[q], query_to_range[q]);
+        sparse_index_method_result_count[q] = primary_key_read_by_sparse_index_file(query_from_range[q], query_to_range[q], number_of_tuples_per_block);
         printf("[Using Sparse Index file] Count of tuples in the range [%d, %d] = %d\n", query_from_range[q], query_to_range[q], sparse_index_method_result_count[q]);
     }
     clock_t end_b4 = clock();

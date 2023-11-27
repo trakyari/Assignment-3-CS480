@@ -50,7 +50,6 @@ void create_dense_clustering_key()
             tuple_count = tuple_count + 1;
 		}
 	}
-    printf("Tuples: %d", tuple_count);
 	close(fd);
 	
     // Step 5: Write the index buffer to file (to be later opened while performing queries)
@@ -74,8 +73,8 @@ void create_sparse_clustering_key()
     size_t total_number_of_blocks_in_file = (row_count * col_count) / block_size_in_number_of_items;
     uint64_t *block_data = malloc(block_size_in_bytes);
 
-    size_t index_buffer_size_in_number_of_items = row_count / 10 * 2;
-    size_t index_buffer_size_in_bytes = index_buffer_size_in_number_of_items * sizeof(uint64_t);
+    size_t index_buffer_size_in_number_of_items = row_count / 10;
+    size_t index_buffer_size_in_bytes = index_buffer_size_in_number_of_items * 2 * sizeof(uint64_t);
 	uint64_t *index_buffer = malloc(index_buffer_size_in_bytes);
 
     int tuple_count = 0;
@@ -99,8 +98,6 @@ void create_sparse_clustering_key()
             tuple_count = tuple_count + 1;
 		}
 	}
-
-    printf("Tuples: %d", tuple_count);
 
 	close(fd);
 	
