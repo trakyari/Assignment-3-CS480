@@ -1,4 +1,4 @@
-.metadata
-.data
-.dense_index
-.sparse_index
+*.metadata
+*.data
+*.dense_index
+*.sparse_index
