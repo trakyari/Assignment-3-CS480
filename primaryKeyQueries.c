@@ -98,21 +98,17 @@ int primary_key_read_by_block(uint64_t from, uint64_t to, int number_of_tuples_p
         pread(fd, block_data, block_size_in_bytes, file_offset);
         file_offset = file_offset + block_size_in_bytes;
 
+        // You can skip scanning, is the first element of the block is greater than "to" of the range
+        // You can skip an entire block, just by checkin the last tuple of the block
         if (block_data[0] > to) break;
 
         // Since data is stored in row-major order, we are iterating in strides of col_count    
+        // For each block, iterate through all the tuples in the block to check if a tuple is in the range
 		for (int j=0; j < block_size_in_number_of_items; j=j+col_count)
         {
             if (block_data[j] >= from && block_data[j] <= to) match_count++;
 		}
 	}
-    
-    //        For each block, iterate through all the tuples in the block to check if a tuple is in the range
-    //        You can skip an entire block, just by checkin the last tuple of the block
-    //        You can skip scanning, is the first element of the block is greater than "to" of the range
-    // NOTE: Step 3 is nested within Step 2 (i.e. you read a block and then you parse the block one by one)
-    // TODO
-
 
     // Step 4: close the file and free the block buffer
     // uncomment the following line (close) 
@@ -200,6 +196,13 @@ uint64_t binarySearch(uint64_t arr[], uint64_t value)
             r = mid - 1;
         }
     }
+    
+    // if ((arr[r] - value) < (arr[l] - value)) {
+    //     return r;
+    // } 
+    // else {
+    //     return l;
+    // }
 
     if (arr[l] < value && value < arr[r]) {
         return l;
@@ -254,8 +257,6 @@ int primary_key_read_by_dense_index_file(uint64_t from, uint64_t to, int number_
     off_t block_offset = from_block_index * block_size_in_bytes;
     int match_count = 0;
 
-    // printf("From index: %d\n", from_block_index);
-    // printf("To index: %d\n", to_block_index);
     // Step 6: Iterate through only those blocks that might contain data in the queried range (starting from from_block_index)
     for (int i=from_block_index; i <= to_block_index; i++)
 	{
@@ -266,10 +267,6 @@ int primary_key_read_by_dense_index_file(uint64_t from, uint64_t to, int number_
         // Since data is stored in row-major order, we are iterating in strides of col_count    
 		for (int j=0; j < block_size_in_number_of_items; j=j+col_count)
         {
-            // printf("Block data: %d", block_data[j]);
-            // You can skip scanning, is the first element of the block is greater than "to" of the range
-            if (block_data[j] > to) break;
-
             if (block_data[j] >= from && block_data[j] <= to) match_count++;
 		}
 	}
@@ -334,7 +331,6 @@ void unload_sparse_index_file()
 int primary_key_read_by_sparse_index_file(uint64_t from, uint64_t to, int number_of_tuples_per_block)
 {
     uint64_t old_row_count = row_count; 
-    // printf("Previous row count: %d\n", row_count);
     row_count = row_count / 10;
 
     // Step 1: Look the dense buffer is loaded in memory; find the index corresponding to "from" (using linear/binary search, as the index is already sorted)
@@ -346,7 +342,6 @@ int primary_key_read_by_sparse_index_file(uint64_t from, uint64_t to, int number
     uint64_t to_key = binarySearch(sparse_index_only_buffer, to);
     
     row_count = old_row_count; 
-    // printf("Current row count: %d\n", row_count);
 
     // Step 3: Since data is sorted based on the primary key, we can make reads in block (instead of tuples)
     // Assuming that each block is composed of "number_of_tuples_per_block" rows
@@ -356,11 +351,6 @@ int primary_key_read_by_sparse_index_file(uint64_t from, uint64_t to, int number
     size_t total_number_of_blocks_in_file = (row_count * col_count) / block_size_in_number_of_items;
     int from_block_index = (sparse_index_and_ptr_buffer[from_key * 2 + 1]) / block_size_in_number_of_items;
     int to_block_index = (sparse_index_and_ptr_buffer[to_key * 2 + 1]) / block_size_in_number_of_items;
-
-    // Sanity check
-    // if (from_key > to_key) {
-    //     to_block_index = total_number_of_blocks_in_file;
-    // }
 
     to_block_index = total_number_of_blocks_in_file;
 
@@ -377,17 +367,15 @@ int primary_key_read_by_sparse_index_file(uint64_t from, uint64_t to, int number
     // Step 6: Iterate through only those blocks that might contain data in the queried range (starting from from_block_index)
     for (int i=from_block_index; i < to_block_index; i++)
 	{
-        // printf("Block index: %d\n", i);
         pread(fd, block_data, block_size_in_bytes, block_offset);
         block_offset = block_offset + block_size_in_bytes;
+       
+        // You can skip scanning, is the first element of the block is greater than "to" of the range
+        if (block_data[0] > to) break;
 
         // Since data is stored in row-major order, we are iterating in strides of col_count    
 		for (int j=0; j < block_size_in_number_of_items; j=j+col_count)
         {
-            // printf("Block data: %d", block_data[j]);
-            // You can skip scanning, is the first element of the block is greater than "to" of the range
-            if (block_data[j] > to) break;
-
             if (block_data[j] >= from && block_data[j] <= to) match_count++;
 		}
 	}
