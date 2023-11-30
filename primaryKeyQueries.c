@@ -197,13 +197,6 @@ uint64_t binarySearch(uint64_t arr[], uint64_t value)
         }
     }
     
-    // if ((arr[r] - value) < (arr[l] - value)) {
-    //     return r;
-    // } 
-    // else {
-    //     return l;
-    // }
-
     if (arr[l] < value && value < arr[r]) {
         return l;
     } 
