@@ -98,12 +98,11 @@ int primary_key_read_by_block(uint64_t from, uint64_t to, int number_of_tuples_p
         pread(fd, block_data, block_size_in_bytes, file_offset);
         file_offset = file_offset + block_size_in_bytes;
 
+        if (block_data[0] > to) break;
+
         // Since data is stored in row-major order, we are iterating in strides of col_count    
 		for (int j=0; j < block_size_in_number_of_items; j=j+col_count)
         {
-            // You can skip scanning, is the first element of the block is greater than "to" of the range
-            if (block_data[j] > to) break;
-
             if (block_data[j] >= from && block_data[j] <= to) match_count++;
 		}
 	}
